@@ -17,7 +17,7 @@ service_types <- c(
   "Samples, Supplies & Manpower")
 
 
-myapi <- function(startDate, endDate, timeout = 10) { # i.e. "-1,-1,2022-09-18,2022-09-19"
+myapi <- function(startDate, endDate, timeout = 10, token = usertoken) { # i.e. "-1,-1,2022-09-18,2022-09-19"
   ua <- user_agent("bcl/angelangelov")
   
   myfacility <- ";CL%20BCL%20Capillary%20and%20Third%20Generation%20Sequencing;"
@@ -29,7 +29,7 @@ myapi <- function(startDate, endDate, timeout = 10) { # i.e. "-1,-1,2022-09-18,2
   url <- str_c("https://secure20.ideaelan.com/kaust/WS/IdeaElanService.svc/GetAllSampleSubmissionDetails/", path)
   print(url)
   
-  resp <- GET(url, add_headers('Usertoken' = usertoken), ua, timeout(timeout))
+  resp <- GET(url, add_headers('Usertoken' = token), ua, timeout(timeout))
   stop_for_status(resp)
   
   if (http_type(resp) != "text/plain") {
@@ -75,8 +75,10 @@ make_table <- function(parsed) {
     #Initiated = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Initiated']}),
     Created = as.POSIXct(parsed$SampleSubmissionDetails$SampleSubmission$CreatedDate, format = '%m/%d/%Y %I:%M:%S %p'),
     SamplesReceived = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Samples received)']}),
-    Complete = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed']}),
-    Billed = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Billed']}),
+    #Complete = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed']}),
+    Billed = lapply(
+      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, 
+      function(x) {x$EndDate[x$Name == 'Complete & Ready to be billed' | x$Name == 'Billed'][1]}), # !!! end date here
     LastUpdated = as.POSIXct(parsed$SampleSubmissionDetails$SampleSubmission$LastUpdated, format = '%m/%d/%Y %I:%M:%S %p'),
     StatusUpdates = c(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status)
     )
@@ -88,20 +90,26 @@ make_table <- function(parsed) {
       TemplateName = textclean::mgsub(TemplateName, pattern = paste0(service_types, ".*"), replacement = service_types, fixed = F),
       #Initiated = as.POSIXct(as.character(Initiated), format = '%m/%d/%Y %I:%M:%S %p'),
       Billed = as.POSIXct(as.character(Billed), format = '%m/%d/%Y %I:%M:%S %p'),
-      SamplesReceived = as.POSIXct(as.character(SamplesReceived), format = '%m/%d/%Y %I:%M:%S %p'),
-      Complete = as.POSIXct(as.character(Complete), format = '%m/%d/%Y %I:%M:%S %p')) 
+      SamplesReceived = as.POSIXct(as.character(SamplesReceived), format = '%m/%d/%Y %I:%M:%S %p')
+      #Complete = as.POSIXct(as.character(Complete), format = '%m/%d/%Y %I:%M:%S %p')) 
+    )
+}
 
+# determine if there is a weekend in a date interval
+is_weekend <- function(x, y) {
+  if(is.na(x) || is.na(y)) return(NA)
+  any(format(seq(x, y, by = 'day'), '%u') %in% 5:6) # %u is day of week as numeric
 }
 
 # days is how many days back to update rel to today 
-update_data <- function(olddf, days = 7, timeout = 10) {
+update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
   if (nrow(olddf) < 1) {
     return()
   }
   #startDate <- olddf$Initiated %>% max(na.rm = T) %>% as.Date()
   startDate <- today() - days(days)
   endDate <- today()
-  newdata <- myapi(startDate, endDate, timeout = timeout)
+  newdata <- myapi(startDate, endDate, timeout = timeout, token = token)
   newdf <- make_table(newdata)
   if (nrow(newdf) > 0) {
     print(paste0(nrow(dplyr::setdiff(newdf, olddf)), " rows updated"))
