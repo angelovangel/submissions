@@ -49,13 +49,14 @@ ui <- page_navbar(
       #)
   ),
   nav_panel(title = "Turnaround time",
-    card(
-      height = '200px',
-      apexchartOutput('apex_tat')
-    ),
-    card(
-      reactableOutput('submissions_selected')
-    )
+            fluidRow(
+              column(width = 4, sparkBoxOutput("spark1")),
+              column(width = 4, sparkBoxOutput("spark2")),
+              column(width = 4, sparkBoxOutput("spark3"))
+            ), 
+            card(
+              reactableOutput('submissions_selected')
+            )
   )
 )
 
@@ -74,8 +75,17 @@ server <- function(input, output, session) {
     submissions1() %>%
       dplyr::filter(TemplateName == input$template) %>%
       group_by(Created, Billed) %>%
-      mutate(tat = time_length(Billed - Created, unit = input$time_units)) %>%
-      mutate(Weekend = is_weekend(Created, Billed)) %>%
+      mutate(tat = case_when(
+        # for sanger, use samples received as start
+        input$template == service_types[1] ~ time_length(DataReleased - SamplesReceived, unit = input$time_units), 
+        TRUE ~ time_length(Billed - Created, unit = input$time_units)
+        ), 
+      ) %>%
+      mutate(Weekend = case_when(
+        input$template == service_types[1] ~ is_weekend(SamplesReceived, DataReleased), # for sanger only
+        TRUE ~ is_weekend(Created, Billed) 
+        )
+      ) %>%
       mutate(tat = ifelse(Weekend & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
   })
   
@@ -125,6 +135,7 @@ server <- function(input, output, session) {
   })
   status_coldef <- list(Status = colDef(minWidth = 200))
   weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-"))
+  datarel_coldef <- list(DataReleased = colDef(show = F))
   
   output$submissions_table <- renderReactable(
     
@@ -147,7 +158,7 @@ server <- function(input, output, session) {
           list(color = '#f46d43')
         }
       },
-      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef),
+      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef),
       onClick = 'expand',
       details = function(index) {
         status_data <- 
@@ -155,18 +166,25 @@ server <- function(input, output, session) {
           mutate(
             StartDate = as.POSIXct(StartDate, format = '%m/%d/%Y %I:%M:%S %p'),
             EndDate = as.POSIXct(EndDate, format = '%m/%d/%Y %I:%M:%S %p'),
-            TAT = time_length(EndDate - StartDate, unit = input$time_units)
+            process_length = time_length(EndDate - StartDate, unit = input$time_units)
             ) %>% 
-          select(Status = Name, Start = StartDate, End = EndDate, TAT)
+          select(Process = Name, Start = StartDate, End = EndDate, process_length)
         htmltools::div(style = "padding: 0.5rem",
                        reactable(
                          status_data, outlined = T, rownames = F, compact = T, borderless = T, highlight = T,
                          class = 'my-tbl', width = '100%',
+                         rowStyle = function(index) {
+                           if (str_detect(status_data[index, 'Process'], 'InProgress.*')) {
+                              list(fontWeight = "bold")
+                            } else {
+                              list(color = "#566573")
+                           }
+                         },
                          columns = list(
                            Start = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
                            End = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
-                           TAT = colDef(
-                             name = paste0("Turnaround (", input$time_units, ")"), 
+                           process_length = colDef(
+                             name = paste0("Process length (", input$time_units, ")"), 
                              format = colFormat(digits = 1),
                              )
                          )
@@ -179,8 +197,22 @@ server <- function(input, output, session) {
   
   
   ######## APEX
-  output$apex_tat <- renderApexchart({
-    apex(data = mtcars, type = 'bar', mapping = aes(x = cyl))
+  output$spark1 <- renderSparkBox({
+    spark_box(
+      data = spark_data,title = 'Title 1', subtitle = 'Subtitle 1', type = 'column'
+    )
+  })
+  
+  output$spark2 <- renderSparkBox({
+    spark_box(
+      data = spark_data,title = 'Title 2', subtitle = 'Subtitle 2', type = 'column'
+    )
+  })
+  
+  output$spark3 <- renderSparkBox({
+    spark_box(
+      data = spark_data,title = 'Title 3', subtitle = 'Subtitle 3', type = 'column'
+    )
   })
   ######## APEX
   

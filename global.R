@@ -74,7 +74,14 @@ make_table <- function(parsed) {
     
     #Initiated = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Initiated']}),
     Created = as.POSIXct(parsed$SampleSubmissionDetails$SampleSubmission$CreatedDate, format = '%m/%d/%Y %I:%M:%S %p'),
-    SamplesReceived = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Samples received)']}),
+    # visible column used for Sanger only to start tat
+    SamplesReceived = lapply(
+      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Samples received)']}
+      ),
+    # hidden column used for Sanger only to end tat
+    DataReleased = lapply(
+      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Data released)']}
+      ),
     #Complete = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed']}),
     Billed = lapply(
       parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, 
@@ -90,7 +97,8 @@ make_table <- function(parsed) {
       TemplateName = textclean::mgsub(TemplateName, pattern = paste0(service_types, ".*"), replacement = service_types, fixed = F),
       #Initiated = as.POSIXct(as.character(Initiated), format = '%m/%d/%Y %I:%M:%S %p'),
       Billed = as.POSIXct(as.character(Billed), format = '%m/%d/%Y %I:%M:%S %p'),
-      SamplesReceived = as.POSIXct(as.character(SamplesReceived), format = '%m/%d/%Y %I:%M:%S %p')
+      SamplesReceived = as.POSIXct(as.character(SamplesReceived), format = '%m/%d/%Y %I:%M:%S %p'),
+      DataReleased = as.POSIXct(as.character(DataReleased), format = '%m/%d/%Y %I:%M:%S %p')
       #Complete = as.POSIXct(as.character(Complete), format = '%m/%d/%Y %I:%M:%S %p')) 
     )
 }
