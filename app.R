@@ -164,7 +164,7 @@ server <- function(input, output, session) {
   
   ######## APEX
   output$apex_tot <- renderApexchart({
-    apex(data = mpg, type = 'bar', mapping = aes(x = manufacturer))
+    apex(data = mtcars, type = 'bar', mapping = aes(x = cyl))
   })
   ######## APEX
   
