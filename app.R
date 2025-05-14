@@ -51,7 +51,7 @@ ui <- page_navbar(
   nav_panel(title = "Turnaround time",
     card(
       height = '200px',
-      apexchartOutput('apex_tot')
+      apexchartOutput('apex_tat')
     ),
     card(
       reactableOutput('submissions_selected')
@@ -66,18 +66,20 @@ server <- function(input, output, session) {
     df25 %>% 
       #mutate_if(is.timepoint, format, format = '%Y-%m-%d %H:%M') %>%
       #mutate(Status = as.factor(Status)) %>%
-      dplyr::filter(Created >= input$date[1] & Created <= input$date[2]) %>%
-      dplyr::filter(TemplateName == input$template)
+      dplyr::filter(Created >= input$date[1] & Created <= input$date[2])
       
   })
   
   submissions2 <- reactive({
     submissions1() %>%
+      dplyr::filter(TemplateName == input$template) %>%
       group_by(Created, Billed) %>%
-      mutate(tot = time_length(Billed - Created, unit = input$time_units)) %>%
+      mutate(tat = time_length(Billed - Created, unit = input$time_units)) %>%
       mutate(Weekend = is_weekend(Created, Billed)) %>%
-      mutate(tot = ifelse(Weekend & input$subtract == "TRUE", tot - ifelse(input$time_units == 'hours', 48, 2), tot))
+      mutate(tat = ifelse(Weekend & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
   })
+  
+  
   
    ######## DATA
   
@@ -102,10 +104,24 @@ server <- function(input, output, session) {
   names(col_defs) <- cols
   id_coldef <- list(SampleSubmissionId = colDef(name = "SubmissionID", style = list(fontWeight = 'bold', fontSize = '1em')))
   nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 70))
-  tot_coldef <- reactive({
-    list(tot = colDef(name = ifelse(input$subtract == "TRUE", 'TOT (WE subtr)', 'TOT'), 
+  tat_coldef <- reactive({
+    list(tat = colDef(name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
                       filterable = F, na = "-",
-                      format = colFormat(digits = 1)))
+                      format = colFormat(digits = 1),
+                      style = function(value) {
+                        if (is.na(value)) {
+                          color <- '#f46d43'
+                        } else if (input$time_units == 'hours' && input$template == service_types[1] && value > 48) {
+                          color <- '#f46d43'
+                        } else if (input$time_units == 'days' && input$template == service_types[1] && value > 2.1) {
+                          color <- '#f46d43'
+                        } else {
+                          color <- '#1a9641'
+                        }
+                        list(color = color)
+                      }
+                      )
+         )
   })
   status_coldef <- list(Status = colDef(minWidth = 200))
   weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-"))
@@ -131,7 +147,7 @@ server <- function(input, output, session) {
           list(color = '#f46d43')
         }
       },
-      columns = c(col_defs, tot_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef),
+      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef),
       onClick = 'expand',
       details = function(index) {
         status_data <- 
@@ -139,9 +155,9 @@ server <- function(input, output, session) {
           mutate(
             StartDate = as.POSIXct(StartDate, format = '%m/%d/%Y %I:%M:%S %p'),
             EndDate = as.POSIXct(EndDate, format = '%m/%d/%Y %I:%M:%S %p'),
-            TOT = time_length(EndDate - StartDate, unit = input$time_units)
+            TAT = time_length(EndDate - StartDate, unit = input$time_units)
             ) %>% 
-          select(Status = Name, Start = StartDate, End = EndDate, TOT)
+          select(Status = Name, Start = StartDate, End = EndDate, TAT)
         htmltools::div(style = "padding: 0.5rem",
                        reactable(
                          status_data, outlined = T, rownames = F, compact = T, borderless = T, highlight = T,
@@ -149,7 +165,7 @@ server <- function(input, output, session) {
                          columns = list(
                            Start = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
                            End = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
-                           TOT = colDef(
+                           TAT = colDef(
                              name = paste0("Turnaround (", input$time_units, ")"), 
                              format = colFormat(digits = 1),
                              )
@@ -163,7 +179,7 @@ server <- function(input, output, session) {
   
   
   ######## APEX
-  output$apex_tot <- renderApexchart({
+  output$apex_tat <- renderApexchart({
     apex(data = mtcars, type = 'bar', mapping = aes(x = cyl))
   })
   ######## APEX
