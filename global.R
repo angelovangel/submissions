@@ -78,7 +78,7 @@ make_table <- function(parsed) {
     #Complete = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed']}),
     Billed = lapply(
       parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, 
-      function(x) {x$EndDate[x$Name == 'Complete & Ready to be billed' | x$Name == 'Billed'][1]}), # !!! end date here
+      function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed' | x$Name == 'Billed'][1]}), # !!! end date here?
     LastUpdated = as.POSIXct(parsed$SampleSubmissionDetails$SampleSubmission$LastUpdated, format = '%m/%d/%Y %I:%M:%S %p'),
     StatusUpdates = c(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status)
     )

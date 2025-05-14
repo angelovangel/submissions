@@ -3,6 +3,7 @@ library(bslib)
 library(dplyr)
 library(reactable)
 library(bsicons)
+library(apexcharter)
 
 source('global.R')
 
@@ -44,16 +45,23 @@ ui <- page_navbar(
   
   nav_panel(title = "Submissions table",
       #tags$div(
-        reactableOutput("submissions_table")
+      reactableOutput("submissions_table")
       #)
   ),
-  nav_panel(title = "Turnaround time"
+  nav_panel(title = "Turnaround time",
+    card(
+      height = '200px',
+      apexchartOutput('apex_tot')
+    ),
+    card(
+      reactableOutput('submissions_selected')
+    )
   )
 )
 
 server <- function(input, output, session) {
-  # api calls
   
+  ######## DATA
   submissions1 <- reactive({
     df25 %>% 
       #mutate_if(is.timepoint, format, format = '%Y-%m-%d %H:%M') %>%
@@ -71,7 +79,7 @@ server <- function(input, output, session) {
       mutate(tot = ifelse(Weekend & input$subtract == "TRUE", tot - ifelse(input$time_units == 'hours', 48, 2), tot))
   })
   
-  ########
+   ######## DATA
   
   output$lastcall <- renderText({
     paste0("Last update: ", Sys.time() %>% format.POSIXct())
@@ -81,6 +89,8 @@ server <- function(input, output, session) {
     df25$Created %>% max(na.rm = T) %>% format.POSIXct()
   })
   
+  
+  ######## TABLE
   
   #output$submissions1 <- renderDataTable(dfsummary)
   cols <- c('Created', 'SamplesReceived', 'Billed', 'LastUpdated')
@@ -149,6 +159,14 @@ server <- function(input, output, session) {
       }
     ) 
   )
+  ######## TABLE
+  
+  
+  ######## APEX
+  output$apex_tot <- renderApexchart({
+    apex(data = mpg, type = 'bar', mapping = aes(x = manufacturer))
+  })
+  ######## APEX
   
 }
 
