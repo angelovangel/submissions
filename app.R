@@ -197,6 +197,13 @@ server <- function(input, output, session) {
   
   
   ######## APEX
+  spark_data <- data.frame(
+    date = Sys.Date() + 1:20,
+    var1 = round(rnorm(20, 50, 10)),
+    var2 = round(rnorm(20, 50, 10)),
+    var3 = round(rnorm(20, 50, 10))
+  )
+  
   output$spark1 <- renderSparkBox({
     spark_box(
       data = spark_data,title = 'Title 1', subtitle = 'Subtitle 1', type = 'column'
