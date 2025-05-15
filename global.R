@@ -105,8 +105,19 @@ make_table <- function(parsed) {
 
 # determine if there is a weekend in a date interval
 is_weekend <- function(x, y) {
-  if(is.na(x) || is.na(y)) return(NA)
-  any(format(seq(x, y, by = 'day'), '%u') %in% 5:6) # %u is day of week as numeric
+  if(is.na(x) || is.na(y)) {
+    return(NA)
+  } else if(x > y) { #otherwise seq will error for time
+    return(NA)
+  }
+  any(format(seq.POSIXt(x, y, by = 'day'), '%u') %in% 5:6) # %u is day of week as numeric
+}
+
+# barcharts for tat
+bar_chart <- function(label, width = "100%", height = "16px", fill = "#d1ead9") {
+  bar <- div(style = list(background = fill, width = width, height = height))
+  chart <- div(style = list(flexGrow = 1, marginLeft = "2px", marginTop = "4px"), bar)
+  div(style = list(display = "flex", alignItems = "left"), chart, label)
 }
 
 # days is how many days back to update rel to today 

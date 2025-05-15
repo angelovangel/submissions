@@ -7,6 +7,13 @@ library(apexcharter)
 
 source('global.R')
 
+custom_fonts <- tags$head(
+  tags$link(
+    href = "https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap",
+    rel = "stylesheet"
+  )
+)
+
 df25 <- readRDS('data/df25.rds') %>%
   select(-c('RollNumber', 'LabName', 'AccountCode'))
 
@@ -29,16 +36,24 @@ sidebar <- sidebar(
 )
   
 ui <- page_navbar(
+  custom_fonts,
   includeCSS('www/custom.css'),
   title = '',
   #nav_panel(title = "Submissions table",
   tags$div(
+    
     style = "padding: 0px 0px 0px 25px; margin: 0;", # Adjust padding, margin, and width as needed
     fluidRow(
       dateRangeInput('date', label = '', min = "2024-01-01", max = today(), start = today() - months(1), end = today(), autoclose = T),
       selectizeInput('template', '', choices = service_types, selected = service_types[1], width = '350px'),
-      selectizeInput('time_units', '', choices = c('Turnaround in hours' = 'hours','Turnaround in days' = 'days'), selected = 'hours'),
-      selectizeInput('subtract', '', choices = c("Subtract weekends" = TRUE, "Do not subtract weekends" = FALSE)),
+      selectizeInput('time_units', '', choices = c('Turnaround in hours' = 'hours','Turnaround in days' = 'days'), selected = 'hours', width = '210px'),
+      selectizeInput('subtract', '', choices = c("Subtract weekends" = TRUE, "Do not subtract weekends" = FALSE), width = '250px'),
+      bslib::tooltip(
+      selectInput('tat_start', '', choices = c('Created', 'SamplesReceived'), selected = 'SamplesReceived', width = '190px'),
+      'Use as start of TAT calculation'),
+      bslib::tooltip(
+        selectInput('tat_end', '', choices = c('Billed', 'DataReleased'), selected = 'DataReleased', width = '190px'), 
+        'Use as end of TAT calculation'),
       #csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
     )
   ),
@@ -75,18 +90,20 @@ server <- function(input, output, session) {
     submissions1() %>%
       dplyr::filter(TemplateName == input$template) %>%
       group_by(Created, Billed) %>%
-      mutate(tat = case_when(
-        # for sanger, use samples received as start
-        input$template == service_types[1] ~ time_length(DataReleased - SamplesReceived, unit = input$time_units), 
-        TRUE ~ time_length(Billed - Created, unit = input$time_units)
-        ), 
+      mutate(tat = time_length((!! rlang::sym(input$tat_end)) - (!! rlang::sym(input$tat_start)), unit = input$time_units)
+        # case_when(
+        # # for sanger, use samples received as start
+        # input$template == service_types[1] ~ time_length(DataReleased - SamplesReceived, unit = input$time_units), 
+        # TRUE ~ time_length(Billed - Created, unit = input$time_units)
+        # ), 
       ) %>%
-      mutate(Weekend = case_when(
-        input$template == service_types[1] ~ is_weekend(SamplesReceived, DataReleased), # for sanger only
-        TRUE ~ is_weekend(Created, Billed) 
-        )
+      mutate(Weekend = mapply(is_weekend, !! rlang::sym(input$tat_start), !! rlang::sym(input$tat_end))
+        # case_when(
+        # input$template == service_types[1] ~ mapply(is_weekend, SamplesReceived, DataReleased), # for sanger only
+        # TRUE ~ mapply(is_weekend,Created, Billed) 
+        # )
       ) %>%
-      mutate(tat = ifelse(Weekend & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
+      mutate(tat = ifelse(isTRUE(Weekend) & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
   })
   
   
@@ -115,7 +132,8 @@ server <- function(input, output, session) {
   id_coldef <- list(SampleSubmissionId = colDef(name = "SubmissionID", style = list(fontWeight = 'bold', fontSize = '1em')))
   nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 70))
   tat_coldef <- reactive({
-    list(tat = colDef(name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
+    list(tat = colDef(align = 'left',
+                      name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
                       filterable = F, na = "-",
                       format = colFormat(digits = 1),
                       style = function(value) {
@@ -128,13 +146,22 @@ server <- function(input, output, session) {
                         } else {
                           color <- '#1a9641'
                         }
-                        list(color = color)
-                      }
-                      )
+                        list(
+                          color = color
+                          #fontFamily = 'Roboto Mono'
+                          )
+                      },
+                      cell = function(value){
+                        percent <- ifelse(input$time_units == 'hours', value / 48 * 100, value / 2 * 100)
+                        width <-  paste0(percent, "%") 
+                        fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
+                        bar_chart(formatC(value, digits = 1, format = 'f'), width = width, fill = fill)
+                      })
+                      #)
          )
   })
-  status_coldef <- list(Status = colDef(minWidth = 200))
-  weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-"))
+  status_coldef <- list(Status = colDef(minWidth = 150))
+  weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-", show = F))
   datarel_coldef <- list(DataReleased = colDef(show = F))
   
   output$submissions_table <- renderReactable(
