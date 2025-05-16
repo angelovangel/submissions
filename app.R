@@ -7,15 +7,10 @@ library(apexcharter)
 
 source('global.R')
 
-custom_fonts <- tags$head(
-  tags$link(
-    href = "https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap",
-    rel = "stylesheet"
-  )
-)
-
 df25 <- readRDS('data/df25.rds') %>%
-  select(-c('RollNumber', 'LabName', 'AccountCode'))
+  select(-c('RollNumber', 'LabName', 'AccountCode')) %>%
+  # hidden column to track if it is finalized
+  mutate(Finished = Status %in% finished_status)
 
 csvDownloadButton <- function(id, filename = "data.csv", label = "Download as CSV") {
   tags$button(
@@ -36,7 +31,6 @@ sidebar <- sidebar(
 )
   
 ui <- page_navbar(
-  custom_fonts,
   includeCSS('www/custom.css'),
   title = '',
   #nav_panel(title = "Submissions table",
@@ -45,9 +39,9 @@ ui <- page_navbar(
     style = "padding: 0px 0px 0px 25px; margin: 0;", # Adjust padding, margin, and width as needed
     fluidRow(
       dateRangeInput('date', label = '', min = "2024-01-01", max = today(), start = today() - months(1), end = today(), autoclose = T),
-      selectizeInput('template', '', choices = service_types, selected = service_types[1], width = '350px'),
-      selectizeInput('time_units', '', choices = c('Turnaround in hours' = 'hours','Turnaround in days' = 'days'), selected = 'hours', width = '210px'),
-      selectizeInput('subtract', '', choices = c("Subtract weekends" = TRUE, "Do not subtract weekends" = FALSE), width = '250px'),
+      selectInput('template', '', choices = service_types, selected = service_types[1], width = '330px'),
+      selectInput('time_units', '', choices = c('Turnaround in hours' = 'hours','Turnaround in days' = 'days'), selected = 'hours', width = '210px'),
+      selectInput('subtract', '', choices = c("Subtract weekends" = TRUE, "Do not subtract weekends" = FALSE), width = '250px'),
       bslib::tooltip(
       selectInput('tat_start', '', choices = c('Created', 'SamplesReceived'), selected = 'SamplesReceived', width = '190px'),
       'Use as start of TAT calculation'),
@@ -89,19 +83,16 @@ server <- function(input, output, session) {
   submissions2 <- reactive({
     submissions1() %>%
       dplyr::filter(TemplateName == input$template) %>%
-      group_by(Created, Billed) %>%
+      rowwise() %>%
       mutate(tat = time_length((!! rlang::sym(input$tat_end)) - (!! rlang::sym(input$tat_start)), unit = input$time_units)
-        # case_when(
-        # # for sanger, use samples received as start
-        # input$template == service_types[1] ~ time_length(DataReleased - SamplesReceived, unit = input$time_units), 
-        # TRUE ~ time_length(Billed - Created, unit = input$time_units)
-        # ), 
-      ) %>%
+      ) %>% 
+      # if sample is received but not yet finalized, display elapsed time
+      mutate(tat = ifelse(
+        #!is.na( !! rlang::sym(input$tat_start) ) & is.na( !! rlang::sym(input$tat_end) ), 
+        !Finished,
+        time_length(now() - !! rlang::sym(input$tat_start), unit = input$time_units), 
+        tat)) %>%
       mutate(Weekend = mapply(is_weekend, !! rlang::sym(input$tat_start), !! rlang::sym(input$tat_end))
-        # case_when(
-        # input$template == service_types[1] ~ mapply(is_weekend, SamplesReceived, DataReleased), # for sanger only
-        # TRUE ~ mapply(is_weekend,Created, Billed) 
-        # )
       ) %>%
       mutate(tat = ifelse(isTRUE(Weekend) & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
   })
@@ -130,9 +121,9 @@ server <- function(input, output, session) {
   )
   names(col_defs) <- cols
   id_coldef <- list(SampleSubmissionId = colDef(name = "SubmissionID", style = list(fontWeight = 'bold', fontSize = '1em')))
-  nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 70))
+  nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 60))
   tat_coldef <- reactive({
-    list(tat = colDef(align = 'left',
+    list(tat = colDef(align = 'left', minWidth = 100,
                       name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
                       filterable = F, na = "-",
                       format = colFormat(digits = 1),
@@ -144,18 +135,24 @@ server <- function(input, output, session) {
                         } else if (input$time_units == 'days' && input$template == service_types[1] && value > 2.1) {
                           color <- '#f46d43'
                         } else {
-                          color <- '#1a9641'
+                          color <- '#12692d'
                         }
                         list(
                           color = color
                           #fontFamily = 'Roboto Mono'
                           )
                       },
-                      cell = function(value){
+                      cell = function(value, index){
                         percent <- ifelse(input$time_units == 'hours', value / 48 * 100, value / 2 * 100)
                         width <-  paste0(percent, "%") 
                         fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
-                        bar_chart(formatC(value, digits = 1, format = 'f'), width = width, fill = fill)
+                        isfinished <- submissions2()[index, ]$Finished
+                        mylabel <- ifelse(
+                          isTRUE(isfinished),
+                          formatC(value, digits = 1, format = 'f'),
+                          paste0('In progress: ', formatC(value, digits = 1, format = 'f'))
+                        )
+                        bar_chart(label = mylabel, width = width, fill = fill, drawbar = isTRUE(isfinished))
                       })
                       #)
          )
@@ -163,6 +160,7 @@ server <- function(input, output, session) {
   status_coldef <- list(Status = colDef(minWidth = 150))
   weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-", show = F))
   datarel_coldef <- list(DataReleased = colDef(show = F))
+  finished_coldef <- list(Finished = colDef(show = F))
   
   output$submissions_table <- renderReactable(
     
@@ -170,7 +168,7 @@ server <- function(input, output, session) {
       submissions2() %>% select(-c('StatusUpdates', 'TemplateName')), 
       showPageSizeOptions = TRUE,
       pageSizeOptions = c(5, 20, 50, 150),
-      defaultPageSize = 50,
+      defaultPageSize = 150,
       defaultSorted = list('SampleSubmissionId' = 'desc'), 
       class = 'my-tbl', 
       outlined = F, 
@@ -178,14 +176,14 @@ server <- function(input, output, session) {
       filterable = T,
       rowStyle = function(index) {
         if(submissions2()[index, "Status"] == 'Billed' | submissions2()[index, "Status"] == 'Complete & Ready to be billed') {
-          list(color = "#1a9641")
+          list(color = "#12692d")
         } else if (submissions2()[index, "Status"] == 'Approval Process (Cancel)') {
           list(color = '#d7191c')
         } else if (submissions2()[index, "Status"] == 'Approved by User') {
           list(color = '#f46d43')
         }
       },
-      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef),
+      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef, finished_coldef),
       onClick = 'expand',
       details = function(index) {
         status_data <- 

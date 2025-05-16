@@ -16,6 +16,10 @@ service_types <- c(
   "Service Request - Fragment Analysis", 
   "Samples, Supplies & Manpower")
 
+finished_status <- c(
+  "Billed", "Complete & Ready to be billed", "Approval Process (Cancel)"
+)
+
 
 myapi <- function(startDate, endDate, timeout = 10, token = usertoken) { # i.e. "-1,-1,2022-09-18,2022-09-19"
   ua <- user_agent("bcl/angelangelov")
@@ -74,13 +78,13 @@ make_table <- function(parsed) {
     
     #Initiated = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Initiated']}),
     Created = as.POSIXct(parsed$SampleSubmissionDetails$SampleSubmission$CreatedDate, format = '%m/%d/%Y %I:%M:%S %p'),
-    # visible column used for Sanger only to start tat
+    # visible column used for Sanger only to start tat, take first
     SamplesReceived = lapply(
-      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Samples received)']}
+      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Samples received)'][1]}
       ),
     # hidden column used for Sanger only to end tat
     DataReleased = lapply(
-      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Data released)']}
+      parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'InProgress(Data released)'][1]}
       ),
     #Complete = lapply(parsed$SampleSubmissionDetails$SampleSubmission$Statuses$Status, function(x) {x$StartDate[x$Name == 'Complete & Ready to be billed']}),
     Billed = lapply(
@@ -114,10 +118,14 @@ is_weekend <- function(x, y) {
 }
 
 # barcharts for tat
-bar_chart <- function(label, width = "100%", height = "16px", fill = "#d1ead9") {
-  bar <- div(style = list(background = fill, width = width, height = height))
+bar_chart <- function(label, width = "100%", height = "16px", fill = "#d1ead9", drawbar = TRUE) {
+  bar <- div(
+    style = list(background = fill, 
+                 width = ifelse(drawbar, width, '0%'), 
+                 height = height)
+    )
   chart <- div(style = list(flexGrow = 1, marginLeft = "2px", marginTop = "4px"), bar)
-  div(style = list(display = "flex", alignItems = "left"), chart, label)
+  div(style = list(display = "flex", alignItems = "right"), chart, label)
 }
 
 # days is how many days back to update rel to today 
