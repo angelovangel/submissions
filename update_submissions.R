@@ -9,13 +9,14 @@ args <- commandArgs(trailingOnly = TRUE)
 # read old data, update and write back updated data
 
 # args[1] is olddf
+# args[2] is days back to update
 # args[2] is usertoken
 
 olddf <- readRDS(args[1])
 
 # Try updating the data
 tryCatch({
-  newdf <- update_data(olddf = olddf, token = args[2])
+  newdf <- update_data(olddf = olddf, days = args[2], token = args[2])
   # Save the updated data only if update_data works
   saveRDS(newdf, args[1])
 }, error = function(e) {

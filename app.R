@@ -13,9 +13,13 @@ df25 <- readRDS('data/df25.rds') %>%
   mutate(Finished = Status %in% finished_status)
 
 csvDownloadButton <- function(id, filename = "data.csv", label = "Download as CSV") {
-  tags$button(
-    class='btn btn-default form-control', style = "width: 18%; padding: .375rem .375rem;",
-    tagList(icon("download"), label),
+  tags$div(
+    class='nav-item', 
+    #style = "width: 18%; padding: .375rem .375rem;",
+    label,
+    # tagList(
+    #   #icon("download"), 
+    #   label),
     onclick = sprintf("Reactable.downloadDataCSV('%s', '%s')", id, filename)
   )
 }
@@ -47,15 +51,14 @@ ui <- page_navbar(
       'Use as start of TAT calculation'),
       bslib::tooltip(
         selectInput('tat_end', '', choices = c('Billed', 'DataReleased'), selected = 'DataReleased', width = '190px'), 
-        'Use as end of TAT calculation'),
-      #csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
+        'Use as end of TAT calculation')
     )
   ),
   
   nav_panel(title = "Submissions table",
       #tags$div(
-      reactableOutput("submissions_table")
-      #)
+      reactableOutput("submissions_table"),
+      csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
   ),
   nav_panel(title = "Turnaround time",
             fluidRow(
@@ -66,7 +69,8 @@ ui <- page_navbar(
             card(
               reactableOutput('submissions_selected')
             )
-  )
+  ),
+  nav_panel(title = csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv'))
 )
 
 server <- function(input, output, session) {
@@ -109,6 +113,11 @@ server <- function(input, output, session) {
     df25$Created %>% max(na.rm = T) %>% format.POSIXct()
   })
   
+  # adjust TAT automatically based on service type
+  observeEvent(input$template, {
+    updateSelectInput('tat_start', session = session, selected = ifelse(input$template == service_types[1], 'SamplesReceived', 'Created'))
+    updateSelectInput('tat_end', session = session, selected = ifelse(input$template == service_types[1], 'DataReleased', 'Billed'))
+  })
   
   ######## TABLE
   
@@ -143,7 +152,10 @@ server <- function(input, output, session) {
                           )
                       },
                       cell = function(value, index){
-                        percent <- ifelse(input$time_units == 'hours', value / 48 * 100, value / 2 * 100)
+                        # 2 days for Sanger, 7 days for all else
+                        tathours <- ifelse(input$template == service_types[1], 48, 168)
+                        tatdays <- ifelse(input$template == service_types[1], 2, 7)
+                        percent <- ifelse(input$time_units == 'hours', value / tathours * 100, value / tatdays * 100)
                         width <-  paste0(percent, "%") 
                         fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
                         isfinished <- submissions2()[index, ]$Finished
@@ -218,7 +230,6 @@ server <- function(input, output, session) {
       }
     ) 
   )
-  ######## TABLE
   
   
   ######## APEX
@@ -246,7 +257,7 @@ server <- function(input, output, session) {
       data = spark_data,title = 'Title 3', subtitle = 'Subtitle 3', type = 'column'
     )
   })
-  ######## APEX
+
   
 }
 
