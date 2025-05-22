@@ -6,6 +6,7 @@ library(tidyr)
 library(dplyr)
 library(textclean)
 library(lubridate)
+library(plotly)
 #library(tibblify) # devtools::install_github("mgirlich/tibblify")
 
 #path_const <- "kaust_test/WS/IdeaElanService.svc/GetAllSampleSubmissionDetails/"
@@ -145,3 +146,52 @@ update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
     olddf
   }
 }
+
+make_vb <- function(data, filter, cutoff, totaldays) {
+  df <- data %>% filter(TemplateName == filter) %>% filter(!is.na(tat))
+  total <- nrow(df)
+  submissions_pass <-  nrow(df %>% filter(tat <= cutoff)) 
+  value <- submissions_pass / total *100
+  value_fmt <- paste0(formatC(value, format = "f", digits = 1), "%")
+  sparkdata <- tibble(tat = seq(1, totaldays, by = 1)) %>% 
+    rowwise() %>% 
+    mutate(percent = sum(df$tat < tat, na.rm = T)/sum(!is.na(df$tat))*100)
+  
+  sparkline <- plot_ly(sparkdata) %>%
+    layout(
+      xaxis = list(visible = T, showgrid = F, title = ""),
+      yaxis = list(visible = F, showgrid = F, title = ""),
+      hovermode = "x",
+      margin = list(t = 0, r = 0, l = 0, b = 0),
+      font = list(color = "white"),
+      paper_bgcolor = "transparent",
+      plot_bgcolor = "transparent"
+    ) %>%
+    config(displayModeBar = F) %>% 
+    #plotly::add_vline(value = 48, color = 'white', dash = 1, alpha = 1) %>%
+    add_segments(
+      x = cutoff, xend = cutoff, y = 0, yend = value, 
+      color = I("grey"), 
+      line = list(dash = "dot"), 
+      showlegend = F) %>%
+    add_lines(
+      x = ~tat, y = ~percent,
+      color = I("white"), span = I(2),
+      fill = 'tozeroy', alpha = 0.3
+    )
+    
+  
+  # return
+  value_box(
+    title = filter,
+    value = value_fmt,
+    showcase = sparkline,
+    p('Submissions with TAT < ', cutoff, ' days'),
+    p('Total: ', total, style="text-align:right; color: lightgrey"),
+    p('Below cutoff: ', submissions_pass, style="text-align:right; color:lightgrey"),
+    full_screen = T,
+    theme = 'primary'
+  )
+}
+
+  

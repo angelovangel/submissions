@@ -5,6 +5,7 @@ library(reactable)
 library(bsicons)
 library(apexcharter)
 
+
 source('global.R')
 
 df25 <- readRDS('data/df25.rds') %>%
@@ -38,36 +39,99 @@ ui <- page_navbar(
   includeCSS('www/custom.css'),
   title = '',
   #nav_panel(title = "Submissions table",
-  tags$div(
-    
-    style = "padding: 0px 0px 0px 25px; margin: 0;", # Adjust padding, margin, and width as needed
-    fluidRow(
-      dateRangeInput('date', label = '', min = "2024-01-01", max = today(), start = today() - months(1), end = today(), autoclose = T),
-      selectInput('template', '', choices = service_types, selected = service_types[1], width = '330px'),
-      selectInput('time_units', '', choices = c('Turnaround in hours' = 'hours','Turnaround in days' = 'days'), selected = 'hours', width = '210px'),
-      selectInput('subtract', '', choices = c("Subtract weekends" = TRUE, "Do not subtract weekends" = FALSE), width = '250px'),
-      bslib::tooltip(
-      selectInput('tat_start', '', choices = c('Created', 'SamplesReceived'), selected = 'SamplesReceived', width = '190px'),
-      'Use as start of TAT calculation'),
-      bslib::tooltip(
-        selectInput('tat_end', '', choices = c('Billed', 'DataReleased'), selected = 'DataReleased', width = '190px'), 
-        'Use as end of TAT calculation')
-    )
-  ),
   
-  nav_panel(title = "Submissions table",
-      #tags$div(
-      reactableOutput("submissions_table"),
-      csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
-  ),
+  nav_panel(
+    title = "Submissions table",
+    tags$div(
+      style = "padding: 0px 0px 0px 25px; margin: 0;",
+      # Adjust padding, margin, and width as needed
+      fluidRow(
+        dateRangeInput(
+          'date',
+          label = '',
+          min = "2024-01-01",
+          max = today(),
+          start = today() - months(1),
+          end = today(),
+          autoclose = T
+        ),
+        selectInput(
+          'template',
+          '',
+          choices = service_types,
+          selected = service_types[1],
+          width = '330px'
+        ),
+        selectInput(
+          'time_units',
+          '',
+          choices = c(
+            'Turnaround in hours' = 'hours',
+            'Turnaround in days' = 'days'
+          ),
+          selected = 'hours',
+          width = '210px'
+        ),
+        selectInput(
+          'subtract',
+          '',
+          choices = c(
+            "Subtract weekends" = TRUE,
+            "Do not subtract weekends" = FALSE
+          ),
+          width = '210px'
+        ),
+        bslib::tooltip(
+          selectInput(
+            'tat_start',
+            '',
+            choices = c('Created', 'SamplesReceived'),
+            selected = 'SamplesReceived',
+            width = '190px'
+          ),
+          'Use as start of TAT calculation'
+        ),
+        bslib::tooltip(
+          selectInput(
+            'tat_end',
+            '',
+            choices = c('Billed', 'DataReleased'),
+            selected = 'DataReleased',
+            width = '190px'
+          ),
+          'Use as end of TAT calculation'
+        )
+      )
+    ),
+    
+    reactableOutput("submissions_table"),
+    #csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
+  ), 
   nav_panel(title = "Turnaround time",
-            fluidRow(
-              column(width = 4, sparkBoxOutput("spark1")),
-              column(width = 4, sparkBoxOutput("spark2")),
-              column(width = 4, sparkBoxOutput("spark3"))
-            ), 
-            card(
-              reactableOutput('submissions_selected')
+            layout_column_wrap(
+              #width = 1/3,
+              max_height = '80px',
+              #tags$div(),
+              sliderInput(
+                'time_apex_data', 'Select range for TAT calculation', 
+                timeFormat = "%F", step = 24*60*60,
+                value = as.POSIXlt.Date(c(today() - months(3), today())), 
+                min = min(df25$Created, na.rm = T), 
+                max = max(df25$Billed, na.rm = T)),
+              #tags$div()
+            ),
+            # tat plots only in days
+            layout_column_wrap(
+              max_height = '80px',
+              sliderInput('tat_sanger', 'Test 1', min = 1, max = 15, value = 2, post = " days"),
+              sliderInput('tat_plasmid', 'Test 2', min = 1, max = 30, value = 7, post = " days"),
+              sliderInput('tat_tgs', 'Test 3', min = 1, max = 60, value = 21, post = " days")
+            ),
+            layout_column_wrap(
+              max_height = '150px',
+              uiOutput('vb1'),
+              uiOutput('vb2'),
+              uiOutput('vb3')
             )
   ),
   nav_panel(title = csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv'))
@@ -99,6 +163,24 @@ server <- function(input, output, session) {
       mutate(Weekend = mapply(is_weekend, !! rlang::sym(input$tat_start), !! rlang::sym(input$tat_end))
       ) %>%
       mutate(tat = ifelse(isTRUE(Weekend) & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
+  })
+  
+  # here create datasets for every service type for plotting, also for showing selected records below the apex plots
+  valuebox_data <- reactive({
+    df25 %>%
+    #submissions1() %>%
+      filter(Created >= input$time_apex_data[1] & Created <= input$time_apex_data[2]) %>%
+      filter(Finished) %>%
+      rowwise() %>%
+      mutate(
+        tatstart = as.POSIXct(ifelse(TemplateName == service_types[1], SamplesReceived, Created)),
+        tatend = as.POSIXct(ifelse(TemplateName == service_types[1], DataReleased, Billed)),
+        tat = time_length(tatend - tatstart, unit = 'days')
+      ) %>%
+      mutate(
+        Weekend = mapply(is_weekend, tatstart, tatend)
+      ) %>%
+      mutate(tat = ifelse(isTRUE(Weekend), tat - 2, tat))
   })
   
   
@@ -137,11 +219,13 @@ server <- function(input, output, session) {
                       filterable = F, na = "-",
                       format = colFormat(digits = 1),
                       style = function(value) {
+                        tathours <- ifelse(input$template == service_types[1], 48, 168)
+                        tatdays <- ifelse(input$template == service_types[1], 2, 7)
                         if (is.na(value)) {
                           color <- '#f46d43'
-                        } else if (input$time_units == 'hours' && input$template == service_types[1] && value > 48) {
+                        } else if (input$time_units == 'hours' && value > tathours) {
                           color <- '#f46d43'
-                        } else if (input$time_units == 'days' && input$template == service_types[1] && value > 2.1) {
+                        } else if (input$time_units == 'days' && value > tatdays) {
                           color <- '#f46d43'
                         } else {
                           color <- '#12692d'
@@ -222,7 +306,7 @@ server <- function(input, output, session) {
                            End = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
                            process_length = colDef(
                              name = paste0("Process length (", input$time_units, ")"), 
-                             format = colFormat(digits = 1),
+                             format = colFormat(digits = 1)
                              )
                          )
                          )
@@ -232,32 +316,50 @@ server <- function(input, output, session) {
   )
   
   
-  ######## APEX
-  spark_data <- data.frame(
-    date = Sys.Date() + 1:20,
-    var1 = round(rnorm(20, 50, 10)),
-    var2 = round(rnorm(20, 50, 10)),
-    var3 = round(rnorm(20, 50, 10))
-  )
+  ######## Value boxes
+  # output$vb1 <- renderUI({
+  #   data <- valuebox_data() %>% filter(TemplateName == service_types[1]) %>% filter(!is.na(tat))
+  #   total <- nrow(data)
+  #   tat <- data %>% filter(tat <= input$test1) %>% nrow()
+  #   sparkdata <- tibble(tat = seq(10,100, by = 1)) %>% rowwise() %>% mutate(percent = sum(data$tat < tat, na.rm = T)/sum(!is.na(data$tat)))
+  #   sparkline <- plot_ly(sparkdata) %>%
+  #     #add_vline(48, color = 'white', dash = 1) %>%
+  #     add_lines(
+  #       x = ~tat, y = ~percent,
+  #       color = I("white"), span = I(2),
+  #       fill = 'tozeroy', alpha = 0.3
+  #     ) %>%
+  #     
+  #     layout(
+  #       xaxis = list(visible = T, showgrid = F, title = ""),
+  #       yaxis = list(visible = T, showgrid = F, title = ""),
+  #       hovermode = "x",
+  #       margin = list(t = 0, r = 0, l = 0, b = 0),
+  #       font = list(color = "white"),
+  #       paper_bgcolor = "transparent",
+  #       plot_bgcolor = "transparent"
+  #     ) %>%
+  #     config(displayModeBar = F)
+  #   value_box(
+  #     title = "Sanger",
+  #     value = paste0(formatC(tat/total*100, format = "f", digits = 1), "%"),
+  #     showcase = sparkline,
+  #     p('Submissions with TAT < ', input$test1, 'h'), 
+  #     full_screen = T,
+  #     theme = 'primary'
+  #   )
+  #   #paste0(formatC(tat/total*100, format = "f", digits = 1), "%")
+  # })
   
-  output$spark1 <- renderSparkBox({
-    spark_box(
-      data = spark_data,title = 'Title 1', subtitle = 'Subtitle 1', type = 'column'
-    )
+  output$vb1 <- renderUI({
+    make_vb(data = valuebox_data(), filter = service_types[1], cutoff = input$tat_sanger, totaldays = 15)
   })
-  
-  output$spark2 <- renderSparkBox({
-    spark_box(
-      data = spark_data,title = 'Title 2', subtitle = 'Subtitle 2', type = 'column'
-    )
+  output$vb2 <- renderUI({
+   make_vb(data = valuebox_data(), filter = service_types[2], cutoff = input$tat_plasmid, totaldays = 30)
   })
-  
-  output$spark3 <- renderSparkBox({
-    spark_box(
-      data = spark_data,title = 'Title 3', subtitle = 'Subtitle 3', type = 'column'
-    )
+  output$vb3 <- renderUI({
+    make_vb(data = valuebox_data(), filter = service_types[3], cutoff = input$tat_tgs, totaldays = 60)
   })
-
   
 }
 
