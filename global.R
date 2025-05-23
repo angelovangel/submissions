@@ -153,7 +153,7 @@ make_vb <- function(data, filter, cutoff, totaldays) {
   submissions_pass <-  nrow(df %>% filter(tat <= cutoff)) 
   value <- submissions_pass / total *100
   value_fmt <- paste0(formatC(value, format = "f", digits = 1), "%")
-  sparkdata <- tibble(tat = seq(1, totaldays, by = 1)) %>% 
+  sparkdata <- tibble(tat = seq(1, totaldays, by = 0.5)) %>% 
     rowwise() %>% 
     mutate(percent = sum(df$tat < tat, na.rm = T)/sum(!is.na(df$tat))*100)
   
@@ -162,6 +162,7 @@ make_vb <- function(data, filter, cutoff, totaldays) {
       xaxis = list(visible = T, showgrid = F, title = ""),
       yaxis = list(visible = F, showgrid = F, title = ""),
       hovermode = "x",
+      #hoverlabel = list(gcolor='rgba(255,255,255,0.75)', font=list(color='black')),
       margin = list(t = 0, r = 0, l = 0, b = 0),
       font = list(color = "white"),
       paper_bgcolor = "transparent",
@@ -176,7 +177,7 @@ make_vb <- function(data, filter, cutoff, totaldays) {
       showlegend = F) %>%
     add_lines(
       x = ~tat, y = ~percent,
-      color = I("white"), span = I(2),
+      color = I("white"), span = I(3),
       fill = 'tozeroy', alpha = 0.3
     )
     
@@ -186,7 +187,7 @@ make_vb <- function(data, filter, cutoff, totaldays) {
     title = filter,
     value = value_fmt,
     showcase = sparkline,
-    p('Submissions with TAT < ', cutoff, ' days'),
+    p('of submissions are with TAT < ', cutoff, ' days', style = "color: lightgrey"),
     p('Total: ', total, style="text-align:right; color: lightgrey"),
     p('Below cutoff: ', submissions_pass, style="text-align:right; color:lightgrey"),
     full_screen = T,

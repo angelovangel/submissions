@@ -108,12 +108,13 @@ ui <- page_navbar(
     #csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
   ), 
   nav_panel(title = "Turnaround time",
+            
             layout_column_wrap(
               #width = 1/3,
               max_height = '80px',
               #tags$div(),
               sliderInput(
-                'time_apex_data', 'Select range for TAT calculation', 
+                'time_apex_data', 'Select time period for turnaround time calculation', 
                 timeFormat = "%F", step = 24*60*60,
                 value = as.POSIXlt.Date(c(today() - months(3), today())), 
                 min = min(df25$Created, na.rm = T), 
@@ -123,9 +124,9 @@ ui <- page_navbar(
             # tat plots only in days
             layout_column_wrap(
               max_height = '80px',
-              sliderInput('tat_sanger', 'Test 1', min = 1, max = 15, value = 2, post = " days"),
-              sliderInput('tat_plasmid', 'Test 2', min = 1, max = 30, value = 7, post = " days"),
-              sliderInput('tat_tgs', 'Test 3', min = 1, max = 60, value = 21, post = " days")
+              sliderInput('tat_sanger', 'TAT target Sanger', min = 1, max = 15, value = 2, post = " days"),
+              sliderInput('tat_plasmid', 'TAT target plasmid', min = 1, max = 30, value = 7, post = " days"),
+              sliderInput('tat_tgs', 'TAT target TGS', min = 1, max = 60, value = 21, post = " days")
             ),
             layout_column_wrap(
               max_height = '150px',
@@ -317,39 +318,6 @@ server <- function(input, output, session) {
   
   
   ######## Value boxes
-  # output$vb1 <- renderUI({
-  #   data <- valuebox_data() %>% filter(TemplateName == service_types[1]) %>% filter(!is.na(tat))
-  #   total <- nrow(data)
-  #   tat <- data %>% filter(tat <= input$test1) %>% nrow()
-  #   sparkdata <- tibble(tat = seq(10,100, by = 1)) %>% rowwise() %>% mutate(percent = sum(data$tat < tat, na.rm = T)/sum(!is.na(data$tat)))
-  #   sparkline <- plot_ly(sparkdata) %>%
-  #     #add_vline(48, color = 'white', dash = 1) %>%
-  #     add_lines(
-  #       x = ~tat, y = ~percent,
-  #       color = I("white"), span = I(2),
-  #       fill = 'tozeroy', alpha = 0.3
-  #     ) %>%
-  #     
-  #     layout(
-  #       xaxis = list(visible = T, showgrid = F, title = ""),
-  #       yaxis = list(visible = T, showgrid = F, title = ""),
-  #       hovermode = "x",
-  #       margin = list(t = 0, r = 0, l = 0, b = 0),
-  #       font = list(color = "white"),
-  #       paper_bgcolor = "transparent",
-  #       plot_bgcolor = "transparent"
-  #     ) %>%
-  #     config(displayModeBar = F)
-  #   value_box(
-  #     title = "Sanger",
-  #     value = paste0(formatC(tat/total*100, format = "f", digits = 1), "%"),
-  #     showcase = sparkline,
-  #     p('Submissions with TAT < ', input$test1, 'h'), 
-  #     full_screen = T,
-  #     theme = 'primary'
-  #   )
-  #   #paste0(formatC(tat/total*100, format = "f", digits = 1), "%")
-  # })
   
   output$vb1 <- renderUI({
     make_vb(data = valuebox_data(), filter = service_types[1], cutoff = input$tat_sanger, totaldays = 15)
