@@ -188,6 +188,34 @@
       "Maintainer": "Dirk Eddelbuettel <edd@debian.org>",
       "Repository": "CRAN"
     },
+    "RcppRoll": {
+      "Package": "RcppRoll",
+      "Version": "0.3.1",
+      "Source": "Repository",
+      "Type": "Package",
+      "Title": "Efficient Rolling / Windowed Operations",
+      "Author": "Kevin Ushey",
+      "Maintainer": "Kevin Ushey <kevinushey@gmail.com>",
+      "Description": "Provides fast and efficient routines for common rolling / windowed operations. Routines for the efficient computation of windowed mean, median, sum, product, minimum, maximum, standard deviation and variance are provided.",
+      "License": "GPL (>= 2)",
+      "Depends": [
+        "R (>= 2.15.1)"
+      ],
+      "Suggests": [
+        "zoo",
+        "testthat"
+      ],
+      "Imports": [
+        "Rcpp"
+      ],
+      "LinkingTo": [
+        "Rcpp"
+      ],
+      "RoxygenNote": "6.0.1",
+      "NeedsCompilation": "yes",
+      "Repository": "CRAN",
+      "Encoding": "UTF-8"
+    },
     "apexcharter": {
       "Package": "apexcharter",
       "Version": "0.4.4",

@@ -18,7 +18,7 @@ olddf <- readRDS(args[1])
 tryCatch({
   newdf <- update_data(olddf = olddf, days = as.numeric(args[2]), token = args[3])
   # Save the updated data only if update_data works
-  saveRDS(newdf, args[1])
+  saveRDS(newdf, file = args[1])
 }, error = function(e) {
   cat("Error in update_data:", e$message, "\n")
   quit(status = 1) # Exit with an error status

@@ -135,8 +135,8 @@ update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
     return()
   }
   #startDate <- olddf$Initiated %>% max(na.rm = T) %>% as.Date()
-  startDate <- today() - days(days)
-  endDate <- today()
+  startDate <- lubridate::today() - days(days)
+  endDate <- lubridate::today()
   newdata <- myapi(startDate, endDate, timeout = timeout, token = token)
   newdf <- make_table(newdata)
   if (nrow(newdf) > 0) {
@@ -193,6 +193,28 @@ make_vb <- function(data, filter, cutoff, totaldays) {
     full_screen = T,
     theme = 'primary'
   )
+}
+
+make_rollm <- function(data, filter, n) {
+  df <- data %>% filter(TemplateName == filter) %>% filter(!is.na(tat))
+  df %>%
+    group_by(TemplateName) %>%
+    mutate(rollmean = roll_meanl(tat, n = n, na.rm = T)) %>% 
+    plot_ly() %>% 
+    layout(
+      xaxis = list(visible = T, showgrid = F, title = ""),
+      yaxis = list(visible = T, showgrid = T, title = ""),
+      hovermode = "x",
+      #hoverlabel = list(gcolor='rgba(255,255,255,0.75)', font=list(color='black')),
+      margin = list(t = 0, r = 0, l = 0, b = 0)
+    ) %>%
+    config(displayModeBar = F) %>%
+    add_lines(x= ~Created, y = ~rollmean, fill = 'tozeroy', alpha = 0.3) #%>%
+    # add_segments(
+    #   y = cutoff, yend = cutoff, x = 0, xend = 100, 
+    #   color = I("grey"), 
+    #   line = list(dash = "dot"), 
+    #   showlegend = F)
 }
 
   

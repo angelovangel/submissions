@@ -4,7 +4,8 @@ library(dplyr)
 library(reactable)
 library(bsicons)
 library(apexcharter)
-
+library(RcppRoll)
+library(fs)
 
 source('global.R')
 
@@ -133,13 +134,27 @@ ui <- page_navbar(
               uiOutput('vb1'),
               uiOutput('vb2'),
               uiOutput('vb3')
+            ),
+            layout_column_wrap(
+              max_height = '300px',
+              plotlyOutput('roll1'),
+              plotlyOutput('roll2'),
+              plotlyOutput('roll3')
             )
   ),
-  nav_panel(title = csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv'))
+  nav_panel(title = csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')),
+  nav_panel(
+    title = 'App info',
+    layout_column_wrap(
+      verbatimTextOutput('lastcall'),
+      verbatimTextOutput('lastentry'),
+      verbatimTextOutput('total_entries')
+    )
+  )
 )
 
 server <- function(input, output, session) {
-  
+
   ######## DATA
   submissions1 <- reactive({
     df25 %>% 
@@ -189,11 +204,17 @@ server <- function(input, output, session) {
    ######## DATA
   
   output$lastcall <- renderText({
-    paste0("Last update: ", Sys.time() %>% format.POSIXct())
+    lastupdate <- fs::file_info('data/df25.rds')
+    paste0("Last update: ", lastupdate$modification_time %>% format.POSIXct())
   })
   
   output$lastentry <- renderText({
-    df25$Created %>% max(na.rm = T) %>% format.POSIXct()
+    lastentry <- df25$Created %>% max(na.rm = T) %>% format.POSIXct()
+    paste0("Last entry: ", lastentry)
+  })
+  
+  output$total_entries <- renderText({
+    paste0("Total entries: ", nrow(df25))
   })
   
   # adjust TAT automatically based on service type
@@ -275,9 +296,9 @@ server <- function(input, output, session) {
         if(submissions2()[index, "Status"] == 'Billed' | submissions2()[index, "Status"] == 'Complete & Ready to be billed') {
           list(color = "#12692d")
         } else if (submissions2()[index, "Status"] == 'Approval Process (Cancel)') {
-          list(color = '#d7191c')
-        } else if (submissions2()[index, "Status"] == 'Approved by User') {
-          list(color = '#f46d43')
+          list(color = '#197bd7')
+        } else { #(submissions2()[index, "Status"] == 'Approved by User') {
+          list(color = '#ff6500')
         }
       },
       columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef, finished_coldef),
@@ -327,6 +348,17 @@ server <- function(input, output, session) {
   })
   output$vb3 <- renderUI({
     make_vb(data = valuebox_data(), filter = service_types[3], cutoff = input$tat_tgs, totaldays = 60)
+  })
+  
+  ######## Rolling average plots
+  output$roll1 <- renderPlotly({
+      make_rollm(data = valuebox_data(), filter = service_types[1], n = 7)
+  })
+  output$roll2 <- renderPlotly({
+    make_rollm(data = valuebox_data(), filter = service_types[2], n = 14)
+  })
+  output$roll3 <- renderPlotly({
+    make_rollm(data = valuebox_data(), filter = service_types[3], n = 14)
   })
   
 }
