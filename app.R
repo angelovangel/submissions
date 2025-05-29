@@ -117,7 +117,8 @@ ui <- page_navbar(
               sliderInput(
                 'time_apex_data', 'Select time period for turnaround time calculation', 
                 timeFormat = "%F", step = 24*60*60,
-                value = as.POSIXlt.Date(c(today() - months(3), today())), 
+                value = c(today() - dmonths(3), today()),
+                #value = as.POSIXlt.Date(c(today() - months(3), today())), 
                 min = min(df25$Created, na.rm = T), 
                 max = max(df25$Billed, na.rm = T)),
               #tags$div()
