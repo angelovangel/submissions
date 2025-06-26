@@ -6,5 +6,5 @@
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] - running update_submissions.R"
 
 source .Renviron
-[ ! -z $usertoken ] && ./update_submissions.R ./data/df25.rds 14 $usertoken  || echo 'usertoken variable not found!'
+[ ! -z $usertoken ] && ./update_submissions.R ./data/df25.rds 21 $usertoken  || echo 'usertoken variable not found!'
 
