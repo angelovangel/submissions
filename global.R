@@ -14,7 +14,7 @@ service_types <- c(
   "Sanger" = "Service Request - Sanger Sequencing", 
   "Plasmid ONT" = "Service Request - Plasmid_Amplicon", 
   "TGS" = "Service Request - TGS Sequencing", 
-  "Fragemnt analysis" = "Service Request - Fragment Analysis", 
+  "Fragment analysis" = "Service Request - Fragment Analysis", 
   "External" = "Service Request - 2025 External Prepaid without Agreement_nonSLA TGS Sequencing - BCL TGS",
   "Manpower"= "Samples, Supplies & Manpower")
 
