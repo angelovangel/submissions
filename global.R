@@ -11,11 +11,12 @@ library(plotly)
 
 #path_const <- "kaust_test/WS/IdeaElanService.svc/GetAllSampleSubmissionDetails/"
 service_types <- c(
-  "Service Request - Sanger Sequencing", 
-  "Service Request - Plasmid_Amplicon", 
-  "Service Request - TGS Sequencing", 
-  "Service Request - Fragment Analysis", 
-  "Samples, Supplies & Manpower")
+  "Sanger" = "Service Request - Sanger Sequencing", 
+  "Plasmid ONT" = "Service Request - Plasmid_Amplicon", 
+  "TGS" = "Service Request - TGS Sequencing", 
+  "Fragemnt analysis" = "Service Request - Fragment Analysis", 
+  "External" = "Service Request - 2025 External Prepaid without Agreement_nonSLA TGS Sequencing - BCL TGS",
+  "Manpower"= "Samples, Supplies & Manpower")
 
 finished_status <- c(
   "Billed", "Complete & Ready to be billed", "Approval Process (Cancel)"
