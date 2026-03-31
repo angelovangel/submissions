@@ -109,7 +109,8 @@ ui <- page_navbar(
             
             layout_column_wrap(
               #width = 1/3,
-              max_height = '80px',
+              max_height = '120px',
+              gap = "30px",
               #tags$div(),
               sliderInput(
                 'time_apex_data', 'Select time period for turnaround time calculation', 
@@ -122,19 +123,26 @@ ui <- page_navbar(
             ),
             # tat plots only in days
             layout_column_wrap(
-              max_height = '80px',
+              max_height = '120px',
+              gap = "30px",
+              style = "margin-top: 30px;",
               sliderInput('tat_sanger', 'TAT target Sanger', min = 1, max = 15, value = 2, post = " days"),
               sliderInput('tat_plasmid', 'TAT target plasmid', min = 1, max = 30, value = 7, post = " days"),
               sliderInput('tat_tgs', 'TAT target TGS', min = 1, max = 60, value = 21, post = " days")
             ),
             layout_column_wrap(
-              max_height = '150px',
+              #width = 1/3,
+              fill = FALSE,
+              gap = "30px",
+              style = "margin-top: 30px;",
               uiOutput('vb1'),
               uiOutput('vb2'),
               uiOutput('vb3')
             ),
             layout_column_wrap(
-              max_height = '300px',
+              max_height = '400px',
+              gap = "30px",
+              style = "margin-top: 30px;",
               plotlyOutput('roll1'),
               plotlyOutput('roll2'),
               plotlyOutput('roll3')

@@ -149,6 +149,9 @@ update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
 }
 
 make_vb <- function(data, filter, cutoff, totaldays) {
+  friendly_title <- names(service_types)[service_types == filter]
+  if (length(friendly_title) == 0) friendly_title <- filter
+  
   df <- data %>% filter(TemplateName == filter) %>% filter(!is.na(tat))
   total <- nrow(df)
   submissions_pass <-  nrow(df %>% filter(tat <= cutoff)) 
@@ -185,12 +188,12 @@ make_vb <- function(data, filter, cutoff, totaldays) {
   
   # return
   value_box(
-    title = filter,
+    title = friendly_title,
     value = value_fmt,
     showcase = sparkline,
-    p('of submissions are with TAT < ', cutoff, ' days', style = "color: lightgrey"),
-    p('Total: ', total, style="text-align:right; color: lightgrey"),
-    p('Below cutoff: ', submissions_pass, style="text-align:right; color:lightgrey"),
+    p('of submissions are with TAT < ', cutoff, ' days', style = "color: lightgrey; font-size: 0.9em; margin: 0;"),
+    p('Total: ', total, style="text-align:right; color: lightgrey; font-size: 0.9em; margin: 0;"),
+    p('Below cutoff: ', submissions_pass, style="text-align:right; color:lightgrey; font-size: 0.9em; margin: 0;"),
     full_screen = T,
     theme = 'primary'
   )
