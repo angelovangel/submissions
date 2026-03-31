@@ -44,67 +44,64 @@ ui <- page_navbar(
   nav_panel(
     title = "Submissions table",
     tags$div(
-      style = "padding: 0px 0px 0px 25px; margin: 0;",
-      # Adjust padding, margin, and width as needed
-      fluidRow(
-        dateRangeInput(
-          'date',
-          label = '',
-          min = "2024-01-01",
-          max = today(),
-          start = today() - months(1),
-          end = today(),
-          autoclose = T
+      class = "my-header",
+      style = "padding: 10px 10px 0px 10px; margin: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;",
+      dateRangeInput(
+        'date',
+        label = '',
+        min = "2024-01-01",
+        max = today(),
+        start = today() - lubridate::days(30),
+        end = today(),
+        autoclose = T
+      ),
+      selectInput(
+        'template',
+        '',
+        choices = service_types,
+        selected = service_types[1],
+        width = '200px'
+      ),
+      selectInput(
+        'time_units',
+        '',
+        choices = c(
+          'Turnaround in hours' = 'hours',
+          'Turnaround in days' = 'days'
         ),
+        selected = 'hours',
+        width = '210px'
+      ),
+      selectInput(
+        'subtract',
+        '',
+        choices = c(
+          "Subtract weekends" = TRUE,
+          "Do not subtract weekends" = FALSE
+        ),
+        width = '210px'
+      ),
+      bslib::tooltip(
         selectInput(
-          'template',
+          'tat_start',
           '',
-          choices = service_types,
-          selected = service_types[1],
-          width = '330px'
+          choices = c('Created', 'SamplesReceived'),
+          selected = 'SamplesReceived',
+          width = '190px'
         ),
+        'Use as start of TAT calculation'
+      ),
+      bslib::tooltip(
         selectInput(
-          'time_units',
+          'tat_end',
           '',
-          choices = c(
-            'Turnaround in hours' = 'hours',
-            'Turnaround in days' = 'days'
-          ),
-          selected = 'hours',
-          width = '210px'
+          choices = c('Billed', 'DataReleased'),
+          selected = 'DataReleased',
+          width = '190px'
         ),
-        selectInput(
-          'subtract',
-          '',
-          choices = c(
-            "Subtract weekends" = TRUE,
-            "Do not subtract weekends" = FALSE
-          ),
-          width = '210px'
-        ),
-        bslib::tooltip(
-          selectInput(
-            'tat_start',
-            '',
-            choices = c('Created', 'SamplesReceived'),
-            selected = 'SamplesReceived',
-            width = '190px'
-          ),
-          'Use as start of TAT calculation'
-        ),
-        bslib::tooltip(
-          selectInput(
-            'tat_end',
-            '',
-            choices = c('Billed', 'DataReleased'),
-            selected = 'DataReleased',
-            width = '190px'
-          ),
-          'Use as end of TAT calculation'
-        )
+        'Use as end of TAT calculation'
       )
     ),
-    
     reactableOutput("submissions_table"),
     #csvDownloadButton(id = "submissions_table", filename = 'submissions-data.csv')
   ), 

@@ -5,3 +5,15 @@
 .mybutton {
   padding: 0;
 }
+
+.my-header .form-group {
+    margin-bottom: 5 !important;
+}
+
+.my-header {
+    padding-bottom: 5 !important;
+}
+
+.my-tbl {
+    margin-top: 0 !important;
+}
