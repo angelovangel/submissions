@@ -137,7 +137,7 @@ update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
   }
   #startDate <- olddf$Initiated %>% max(na.rm = T) %>% as.Date()
   startDate <- lubridate::today() - days(days)
-  endDate <- lubridate::today()
+  endDate <- lubridate::today() + days(1) #Infinity response does not include today
   newdata <- myapi(startDate, endDate, timeout = timeout, token = token)
   newdf <- make_table(newdata)
   if (nrow(newdf) > 0) {
