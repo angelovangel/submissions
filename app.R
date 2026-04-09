@@ -225,9 +225,11 @@ server <- function(input, output, session) {
   
   # adjust TAT automatically based on service type
   observeEvent(input$template, {
+    freezeReactiveValue(input, 'tat_start')
+    freezeReactiveValue(input, 'tat_end')
     updateSelectInput('tat_start', session = session, selected = ifelse(input$template == service_types[1], 'SamplesReceived', 'Created'))
     updateSelectInput('tat_end', session = session, selected = ifelse(input$template == service_types[1], 'DataReleased', 'Billed'))
-  })
+  }, ignoreInit = TRUE)
   
   ######## TABLE
   
@@ -242,18 +244,21 @@ server <- function(input, output, session) {
   id_coldef <- list(SampleSubmissionId = colDef(name = "SubmissionID", style = list(fontWeight = 'bold', fontSize = '1em')))
   nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 60))
   tat_coldef <- reactive({
+    tathours <- ifelse(input$template == service_types[1], 48, 168)
+    tatdays <- ifelse(input$template == service_types[1], 2, 7)
+    time_units <- input$time_units
+    finished_vec <- submissions2()$Finished
+
     list(tat = colDef(align = 'left', minWidth = 100,
                       name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
                       filterable = F, na = "-",
                       format = colFormat(digits = 1),
                       style = function(value) {
-                        tathours <- ifelse(input$template == service_types[1], 48, 168)
-                        tatdays <- ifelse(input$template == service_types[1], 2, 7)
                         if (is.na(value)) {
                           color <- '#f46d43'
-                        } else if (input$time_units == 'hours' && value > tathours) {
+                        } else if (time_units == 'hours' && value > tathours) {
                           color <- '#f46d43'
-                        } else if (input$time_units == 'days' && value > tatdays) {
+                        } else if (time_units == 'days' && value > tatdays) {
                           color <- '#f46d43'
                         } else {
                           color <- '#12692d'
@@ -265,12 +270,10 @@ server <- function(input, output, session) {
                       },
                       cell = function(value, index){
                         # 2 days for Sanger, 7 days for all else
-                        tathours <- ifelse(input$template == service_types[1], 48, 168)
-                        tatdays <- ifelse(input$template == service_types[1], 2, 7)
-                        percent <- ifelse(input$time_units == 'hours', value / tathours * 100, value / tatdays * 100)
+                        percent <- ifelse(time_units == 'hours', value / tathours * 100, value / tatdays * 100)
                         width <-  paste0(percent, "%") 
                         fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
-                        isfinished <- submissions2()[index, ]$Finished
+                        isfinished <- finished_vec[index]
                         mylabel <- ifelse(
                           isTRUE(isfinished),
                           formatC(value, digits = 1, format = 'f'),
@@ -286,10 +289,15 @@ server <- function(input, output, session) {
   datarel_coldef <- list(DataReleased = colDef(show = F))
   finished_coldef <- list(Finished = colDef(show = F))
   
-  output$submissions_table <- renderReactable(
+  output$submissions_table <- renderReactable({
+    
+    subs <- submissions2()
+    status_vec <- subs$Status
+    status_updates_list <- subs$StatusUpdates
+    time_units <- input$time_units
     
     reactable(
-      submissions2() %>% select(-c('StatusUpdates', 'TemplateName')), 
+      subs %>% select(-c('StatusUpdates', 'TemplateName')), 
       showPageSizeOptions = TRUE,
       pageSizeOptions = c(5, 20, 50, 150),
       defaultPageSize = 150,
@@ -299,11 +307,12 @@ server <- function(input, output, session) {
       rownames = F, compact = T, wrap = F,
       filterable = T,
       rowStyle = function(index) {
-        if(submissions2()[index, "Status"] == 'Billed' | submissions2()[index, "Status"] == 'Complete & Ready to be billed') {
+        stat <- status_vec[index]
+        if(stat == 'Billed' | stat == 'Complete & Ready to be billed') {
           list(color = "#12692d")
-        } else if (submissions2()[index, "Status"] == 'Approval Process (Cancel)') {
+        } else if (stat == 'Approval Process (Cancel)') {
           list(color = '#197bd7')
-        } else { #(submissions2()[index, "Status"] == 'Approved by User') {
+        } else { #(stat == 'Approved by User') {
           list(color = '#ff6500')
         }
       },
@@ -311,11 +320,11 @@ server <- function(input, output, session) {
       onClick = 'expand',
       details = function(index) {
         status_data <- 
-          submissions2()[index, ]$StatusUpdates[[1]] %>% as_tibble() %>%
+          status_updates_list[[index]] %>% as_tibble() %>%
           mutate(
             StartDate = as.POSIXct(StartDate, format = '%m/%d/%Y %I:%M:%S %p'),
             EndDate = as.POSIXct(EndDate, format = '%m/%d/%Y %I:%M:%S %p'),
-            process_length = time_length(EndDate - StartDate, unit = input$time_units)
+            process_length = time_length(EndDate - StartDate, unit = time_units)
             ) %>% 
           select(Process = Name, Start = StartDate, End = EndDate, process_length)
         htmltools::div(style = "padding: 0.5rem",
@@ -333,7 +342,7 @@ server <- function(input, output, session) {
                            Start = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
                            End = colDef(format = colFormat(datetime = T, locales = 'en-GB')),
                            process_length = colDef(
-                             name = paste0("Process length (", input$time_units, ")"), 
+                             name = paste0("Process length (", time_units, ")"), 
                              format = colFormat(digits = 1)
                              )
                          )
@@ -341,7 +350,7 @@ server <- function(input, output, session) {
         )
       }
     ) 
-  )
+  })
   
   
   ######## Value boxes
