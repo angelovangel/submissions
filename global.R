@@ -7,6 +7,7 @@ library(dplyr)
 library(textclean)
 library(lubridate)
 library(plotly)
+library(data.table)
 #library(tibblify) # devtools::install_github("mgirlich/tibblify")
 
 #path_const <- "kaust_test/WS/IdeaElanService.svc/GetAllSampleSubmissionDetails/"
@@ -111,12 +112,37 @@ make_table <- function(parsed) {
 
 # determine if there is a weekend in a date interval
 is_weekend <- function(x, y) {
-  if(is.na(x) || is.na(y)) {
-    return(NA)
-  } else if(x > y) { #otherwise seq will error for time
-    return(NA)
-  }
-  any(format(seq.POSIXt(x, y, by = 'day'), '%u') %in% 5:6) # %u is day of week as numeric
+  # Vectorized calculation to match any(format(seq.POSIXt(x, y, by = 'day'), '%u') %in% 5:6)
+  # Elements in sequence are x + i*24*3600 for i in 0, 1, ..., floor(difftime(y, x, units='days'))
+  
+  days_diff <- as.numeric(difftime(y, x, units = "days"))
+  
+  # Number of full 24h increments
+  k <- floor(days_diff)
+  
+  wday_start <- as.numeric(format(x, "%u"))
+  wday_end <- as.numeric(format(y, "%u")) # not strictly needed for the seq logic but useful
+  
+  # If k >= 6, we definitely cover at least one Friday (5) or Saturday (6)
+  has_we_long <- k >= 6
+  
+  # For k < 6, we check if the range of wdays [wday_start, wday_start + k] (mod 7) hits 5 or 6
+  # Same week (no wrap around modulo 7)
+  same_week <- (wday_start + k) <= 7
+  has_5_same <- same_week & (wday_start <= 5 & (wday_start + k) >= 5)
+  has_6_same <- same_week & (wday_start <= 6 & (wday_start + k) >= 6)
+  
+  # Cross week boundary (wrap around)
+  cross_week <- !same_week
+  # If it wraps, it covers wday_start..7 AND 1..(wday_start + k - 7)
+  wday_end_wrapped <- wday_start + k - 7
+  has_5_cross <- cross_week & (wday_start <= 5 | wday_end_wrapped >= 5)
+  has_6_cross <- cross_week & (wday_start <= 6 | wday_end_wrapped >= 6)
+  
+  has_we <- has_we_long | has_5_same | has_6_same | has_5_cross | has_6_cross
+  
+  res <- ifelse(is.na(x) | is.na(y) | (x > y), NA, has_we)
+  return(res)
 }
 
 # barcharts for tat

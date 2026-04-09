@@ -12,7 +12,8 @@ source('global.R')
 df25 <- readRDS('data/df25.rds') %>%
   select(-c('RollNumber', 'LabName', 'AccountCode')) %>%
   # hidden column to track if it is finalized
-  mutate(Finished = Status %in% finished_status)
+  mutate(Finished = Status %in% finished_status) %>%
+  as.data.table()
 
 csvDownloadButton <- function(id, filename = "data.csv", label = "Download as CSV") {
   tags$div(
@@ -163,46 +164,87 @@ server <- function(input, output, session) {
 
   ######## DATA
   submissions1 <- reactive({
-    df25 %>% 
-      #mutate_if(is.timepoint, format, format = '%Y-%m-%d %H:%M') %>%
-      #mutate(Status = as.factor(Status)) %>%
-      dplyr::filter(Created >= input$date[1] & Created <= input$date[2])
-      
+    df25[Created >= input$date[1] & Created <= input$date[2]]
   })
   
   submissions2 <- reactive({
-    submissions1() %>%
-      dplyr::filter(TemplateName == input$template) %>%
-      rowwise() %>%
-      mutate(tat = time_length((!! rlang::sym(input$tat_end)) - (!! rlang::sym(input$tat_start)), unit = input$time_units)
-      ) %>% 
-      # if sample is received but not yet finalized, display elapsed time
-      mutate(tat = ifelse(
-        #!is.na( !! rlang::sym(input$tat_start) ) & is.na( !! rlang::sym(input$tat_end) ), 
-        !Finished,
-        time_length(now() - !! rlang::sym(input$tat_start), unit = input$time_units), 
-        tat)) %>%
-      mutate(Weekend = mapply(is_weekend, !! rlang::sym(input$tat_start), !! rlang::sym(input$tat_end))
-      ) %>%
-      mutate(tat = ifelse(isTRUE(Weekend) & input$subtract == "TRUE", tat - ifelse(input$time_units == 'hours', 48, 2), tat))
+    req(input$tat_start, input$tat_end, input$time_units, input$subtract)
+    
+    start_col <- input$tat_start
+    end_col <- input$tat_end
+    unit <- input$time_units
+    sub_we <- input$subtract == "TRUE"
+    
+    # Filter by template using data.table
+    subs <- submissions1()[TemplateName == input$template]
+    
+    if (nrow(subs) == 0) return(subs)
+    
+    # Vectorized TAT calculation
+    starts <- subs[[start_col]]
+    ends <- subs[[end_col]]
+    
+    # Handle In Progress: use now() if not finished
+    eff_ends <- ends
+    in_progress <- !subs$Finished
+    if (any(in_progress)) {
+      eff_ends[in_progress] <- lubridate::now()
+    }
+    
+    subs$tat <- lubridate::time_length(eff_ends - starts, unit = unit)
+    
+    # Vectorized Weekend check (now using the vectorized is_weekend from global.R)
+    subs$Weekend <- is_weekend(starts, eff_ends)
+    
+    # Weekend subtraction logic
+    if (sub_we) {
+      val_to_sub <- if (unit == 'hours') 48 else 2
+      # Only subtract if it's actually a weekend
+      idx_sub <- !is.na(subs$Weekend) & subs$Weekend
+      subs$tat[idx_sub] <- subs$tat[idx_sub] - val_to_sub
+    }
+    
+    subs
   })
   
   # here create datasets for every service type for plotting, also for showing selected records below the apex plots
   valuebox_data <- reactive({
-    df25 %>%
-    #submissions1() %>%
-      filter(Created >= input$time_apex_data[1] & Created <= input$time_apex_data[2]) %>%
-      filter(Finished) %>%
-      rowwise() %>%
-      mutate(
-        tatstart = as.POSIXct(ifelse(TemplateName == service_types[1], SamplesReceived, Created)),
-        tatend = as.POSIXct(ifelse(TemplateName == service_types[1], DataReleased, Billed)),
-        tat = time_length(tatend - tatstart, unit = 'days')
-      ) %>%
-      mutate(
-        Weekend = mapply(is_weekend, tatstart, tatend)
-      ) %>%
-      mutate(tat = ifelse(isTRUE(Weekend), tat - 2, tat))
+    req(input$time_apex_data)
+    
+    # Filter using data.table
+    df <- df25[Created >= input$time_apex_data[1] & Created <= input$time_apex_data[2] & Finished == TRUE]
+    
+    if (nrow(df) == 0) return(df)
+    
+    # Vectorized logic
+    is_sanger <- df$TemplateName == service_types[1]
+    
+    # Use copy to avoid modifying original data.table by reference if needed, 
+    # but here we are creating a new df from the filter above.
+    
+    tatstart <- df$Created
+    # Replace for Sanger
+    idx_sanger <- which(is_sanger)
+    if (length(idx_sanger) > 0) {
+      tatstart[idx_sanger] <- df$SamplesReceived[idx_sanger]
+    }
+    
+    tatend <- df$Billed
+    if (length(idx_sanger) > 0) {
+      tatend[idx_sanger] <- df$DataReleased[idx_sanger]
+    }
+    
+    # Ensure POSIXct class is maintained (sometimes indexing can be tricky)
+    tatstart <- as.POSIXct(tatstart)
+    tatend <- as.POSIXct(tatend)
+    
+    df[, tat := lubridate::time_length(tatend - tatstart, unit = 'days')]
+    df[, Weekend := is_weekend(tatstart, tatend)]
+    
+    # Weekend subtraction
+    df[(!is.na(Weekend) & Weekend), tat := tat - 2]
+    
+    df
   })
   
   
@@ -243,47 +285,43 @@ server <- function(input, output, session) {
   names(col_defs) <- cols
   id_coldef <- list(SampleSubmissionId = colDef(name = "SubmissionID", style = list(fontWeight = 'bold', fontSize = '1em')))
   nsamples_colref <- list(NumberOfSamples = colDef(name = '# samples', filterable = F, minWidth = 60))
-  tat_coldef <- reactive({
-    tathours <- ifelse(input$template == service_types[1], 48, 168)
-    tatdays <- ifelse(input$template == service_types[1], 2, 7)
-    time_units <- input$time_units
-    finished_vec <- submissions2()$Finished
+  # Function to generate TAT column definition
+  get_tat_coldef <- function(template, time_units, subtract, finished_vec) {
+    tathours <- ifelse(template == service_types[1], 48, 168)
+    tatdays <- ifelse(template == service_types[1], 2, 7)
 
-    list(tat = colDef(align = 'left', minWidth = 100,
-                      name = ifelse(input$subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
-                      filterable = F, na = "-",
-                      format = colFormat(digits = 1),
-                      style = function(value) {
-                        if (is.na(value)) {
-                          color <- '#f46d43'
-                        } else if (time_units == 'hours' && value > tathours) {
-                          color <- '#f46d43'
-                        } else if (time_units == 'days' && value > tatdays) {
-                          color <- '#f46d43'
-                        } else {
-                          color <- '#12692d'
-                        }
-                        list(
-                          color = color
-                          #fontFamily = 'Roboto Mono'
-                          )
-                      },
-                      cell = function(value, index){
-                        # 2 days for Sanger, 7 days for all else
-                        percent <- ifelse(time_units == 'hours', value / tathours * 100, value / tatdays * 100)
-                        width <-  paste0(percent, "%") 
-                        fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
-                        isfinished <- finished_vec[index]
-                        mylabel <- ifelse(
-                          isTRUE(isfinished),
-                          formatC(value, digits = 1, format = 'f'),
-                          paste0('In progress: ', formatC(value, digits = 1, format = 'f'))
-                        )
-                        bar_chart(label = mylabel, width = width, fill = fill, drawbar = isTRUE(isfinished))
-                      })
-                      #)
-         )
-  })
+    colDef(
+      align = 'left', minWidth = 100,
+      name = ifelse(subtract == "TRUE", 'TAT (WE subtr)', 'TAT'), 
+      filterable = F, na = "-",
+      format = colFormat(digits = 1),
+      style = function(value) {
+        if (is.na(value)) {
+          color <- '#f46d43'
+        } else if (time_units == 'hours' && value > tathours) {
+          color <- '#f46d43'
+        } else if (time_units == 'days' && value > tatdays) {
+          color <- '#f46d43'
+        } else {
+          color <- '#12692d'
+        }
+        list(color = color)
+      },
+      cell = function(value, index) {
+        percent <- ifelse(time_units == 'hours', value / tathours * 100, value / tatdays * 100)
+        width <- paste0(pmin(pmax(percent, 0), 100), "%") 
+        fill <- ifelse(percent < 100, "#d1ead9", "#ead9d1")
+        isfinished <- finished_vec[index]
+        
+        mylabel <- if (isTRUE(isfinished)) {
+          formatC(value, digits = 1, format = 'f')
+        } else {
+          paste0('In progress: ', formatC(value, digits = 1, format = 'f'))
+        }
+        bar_chart(label = mylabel, width = width, fill = fill, drawbar = isTRUE(isfinished))
+      }
+    )
+  }
   status_coldef <- list(Status = colDef(minWidth = 150))
   weekend_coldef <- list(Weekend = colDef(sortable = F, minWidth = 70, na = "-", show = F))
   datarel_coldef <- list(DataReleased = colDef(show = F))
@@ -316,7 +354,11 @@ server <- function(input, output, session) {
           list(color = '#ff6500')
         }
       },
-      columns = c(col_defs, tat_coldef(), id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef, finished_coldef),
+      columns = c(
+        col_defs, 
+        list(tat = get_tat_coldef(input$template, input$time_units, input$subtract, subs$Finished)),
+        id_coldef, nsamples_colref, status_coldef, weekend_coldef, datarel_coldef, finished_coldef
+      ),
       onClick = 'expand',
       details = function(index) {
         status_data <- 
