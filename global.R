@@ -131,7 +131,7 @@ bar_chart <- function(label, width = "100%", height = "16px", fill = "#d1ead9", 
 }
 
 # days is how many days back to update rel to today 
-update_data <- function(olddf, days = 7, timeout = 60, token = usertoken) {
+update_data <- function(olddf, days = 7, timeout = 300, token = usertoken) {
   if (nrow(olddf) < 1) {
     return()
   }
