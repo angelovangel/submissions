@@ -178,28 +178,34 @@ make_vb <- function(data, filter, cutoff, totaldays) {
   friendly_title <- names(service_types)[service_types == filter]
   if (length(friendly_title) == 0) friendly_title <- filter
   
-  df <- data %>% filter(TemplateName == filter) %>% filter(!is.na(tat))
+  # data.table filtering
+  df <- data[TemplateName == filter & !is.na(tat)]
   total <- nrow(df)
-  submissions_pass <-  nrow(df %>% filter(tat <= cutoff)) 
-  value <- submissions_pass / total *100
+  
+  if (total == 0) {
+    return(value_box(title = friendly_title, value = "No Data", theme = "primary"))
+  }
+  
+  submissions_pass <- sum(df$tat <= cutoff, na.rm = TRUE)
+  value <- (submissions_pass / total) * 100
   value_fmt <- paste0(formatC(value, format = "f", digits = 1), "%")
-  sparkdata <- tibble(tat = seq(1, totaldays, by = 0.5)) %>% 
-    rowwise() %>% 
-    mutate(percent = sum(df$tat < tat, na.rm = T)/sum(!is.na(df$tat))*100)
+  
+  spark_tats <- seq(1, totaldays, by = 0.5)
+  # Vectorized ECDF calculation
+  spark_percents <- ecdf(df$tat)(spark_tats) * 100
+  sparkdata <- data.frame(tat = spark_tats, percent = spark_percents)
   
   sparkline <- plot_ly(sparkdata) %>%
     layout(
       xaxis = list(visible = T, showgrid = F, title = ""),
       yaxis = list(visible = F, showgrid = F, title = ""),
       hovermode = "x",
-      #hoverlabel = list(gcolor='rgba(255,255,255,0.75)', font=list(color='black')),
       margin = list(t = 0, r = 0, l = 0, b = 0),
       font = list(color = "white"),
       paper_bgcolor = "transparent",
       plot_bgcolor = "transparent"
     ) %>%
     config(displayModeBar = F) %>% 
-    #plotly::add_vline(value = 48, color = 'white', dash = 1, alpha = 1) %>%
     add_segments(
       x = cutoff, xend = cutoff, y = 0, yend = value, 
       color = I("grey"), 
@@ -211,8 +217,6 @@ make_vb <- function(data, filter, cutoff, totaldays) {
       fill = 'tozeroy', alpha = 0.3
     )
     
-  
-  # return
   value_box(
     title = friendly_title,
     value = value_fmt,
@@ -226,25 +230,23 @@ make_vb <- function(data, filter, cutoff, totaldays) {
 }
 
 make_rollm <- function(data, filter, n) {
-  df <- data %>% filter(TemplateName == filter) %>% filter(!is.na(tat))
-  df %>%
-    group_by(TemplateName) %>%
-    mutate(rollmean = roll_meanl(tat, n = n, na.rm = T)) %>% 
-    plot_ly() %>% 
+  # data.table filtering
+  df <- data[TemplateName == filter & !is.na(tat)]
+  
+  if (nrow(df) == 0) return(NULL)
+  
+  # data.table rolling mean
+  df[, rollmean := RcppRoll::roll_meanl(tat, n = n, na.rm = T)]
+  
+  plot_ly(df) %>% 
     layout(
       xaxis = list(visible = T, showgrid = F, title = ""),
       yaxis = list(visible = T, showgrid = T, title = ""),
       hovermode = "x",
-      #hoverlabel = list(gcolor='rgba(255,255,255,0.75)', font=list(color='black')),
       margin = list(t = 0, r = 0, l = 0, b = 0)
     ) %>%
     config(displayModeBar = F) %>%
-    add_lines(x= ~Created, y = ~rollmean, fill = 'tozeroy', alpha = 0.3) #%>%
-    # add_segments(
-    #   y = cutoff, yend = cutoff, x = 0, xend = 100, 
-    #   color = I("grey"), 
-    #   line = list(dash = "dot"), 
-    #   showlegend = F)
+    add_lines(x= ~Created, y = ~rollmean, fill = 'tozeroy', alpha = 0.3)
 }
 
   

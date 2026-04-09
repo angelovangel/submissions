@@ -410,13 +410,15 @@ server <- function(input, output, session) {
   ######## Rolling average plots
   output$roll1 <- renderPlotly({
       make_rollm(data = valuebox_data(), filter = service_types[1], n = 7)
-  })
+  }) %>% bindCache(input$time_apex_data)
+
   output$roll2 <- renderPlotly({
     make_rollm(data = valuebox_data(), filter = service_types[2], n = 14)
-  })
+  }) %>% bindCache(input$time_apex_data)
+
   output$roll3 <- renderPlotly({
     make_rollm(data = valuebox_data(), filter = service_types[3], n = 14)
-  })
+  }) %>% bindCache(input$time_apex_data)
   
 }
 
